@@ -1,50 +1,61 @@
-# k8s Multiservice Lab
+# Kubernetes Multiservice Staging Lab
 
-A production-style Kubernetes lab that deploys a Flask API backed by Redis on a
-real k3s cluster. The repo includes the application code, container build,
-Kustomize manifests, namespace controls, network policies, autoscaling, CI
-validation, and operator scripts.
+[![CI](https://github.com/AnouarMohamed/k8s-multiservice-lab/actions/workflows/ci.yaml/badge.svg)](https://github.com/AnouarMohamed/k8s-multiservice-lab/actions/workflows/ci.yaml)
 
-This is intentionally small, but it is shaped like a real service repo: the app
-has health/readiness endpoints, the manifests are reusable, the staging overlay
-is declarative, and every important workflow is runnable from `make`.
+A production-shaped Kubernetes lab that deploys a Flask API and Redis cache to
+a real cluster using Docker, k3s, Kustomize, health probes, network policies,
+autoscaling, resource controls, and CI validation.
+
+The goal is not to run a toy YAML demo. This repo shows the full workflow a
+DevOps engineer should be able to explain: build an app image, load it into a
+local cluster, deploy multiple services, validate service discovery, control
+traffic, observe rollouts, and keep everything reproducible from a clean clone.
+
+## Stack
+
+| Layer | Choice |
+| --- | --- |
+| Application | Flask API with Gunicorn |
+| Cache | Redis |
+| Container | Docker |
+| Kubernetes | k3s, also works with kind for local checks |
+| Manifests | Kustomize base + staging overlay |
+| Validation | GitHub Actions, pytest, yamllint, kubeconform |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  User["Operator / curl"] -->|"port-forward :5000"| SVC["Service: flask-api-svc"]
-  SVC --> APIA["Pod: flask-api"]
-  SVC --> APIB["Pod: flask-api"]
-  APIA -->|"REDIS_HOST=redis-svc"| REDIS["Service: redis-svc"]
-  APIB -->|"REDIS_HOST=redis-svc"| REDIS
-  REDIS --> RPOD["Pod: redis"]
-  CM["ConfigMap: api-config"] --> APIA
-  CM --> APIB
-  SEC["Secret: api-secrets"] --> APIA
-  SEC --> APIB
+  Client["curl / browser"] -->|"port-forward :5000"| ApiSvc["Service: flask-api-svc"]
+  ApiSvc --> ApiA["Pod: flask-api"]
+  ApiSvc --> ApiB["Pod: flask-api"]
+  ApiA -->|"INCR hits"| RedisSvc["Service: redis-svc"]
+  ApiB -->|"INCR hits"| RedisSvc
+  RedisSvc --> Redis["Pod: redis"]
+  Config["ConfigMap: api-config"] --> ApiA
+  Config --> ApiB
+  Secret["Secret: api-secrets"] --> ApiA
+  Secret --> ApiB
 ```
 
-## What It Demonstrates
+## What Makes It Strong
 
-- Multi-service Kubernetes deployment with API and cache services.
-- k3s bootstrap flow for Codespaces-style Linux environments.
-- Local image build and import into k3s containerd.
-- Kustomize base plus staging overlay.
-- ConfigMap and generated Secret injection.
-- Liveness and readiness probes.
-- Rolling updates with zero unavailable API replicas.
-- Redis-backed request counter.
-- Pod Security admission labels, non-root containers, dropped capabilities, and
-  runtime default seccomp.
-- Default-deny NetworkPolicies with explicit API-to-Redis traffic.
-- ResourceQuota, LimitRange, PodDisruptionBudget, and HorizontalPodAutoscaler.
-- CI checks for Python tests, Docker build, YAML linting, Kustomize rendering,
-  Kubernetes schema validation, and client dry-run.
+- Multi-service deployment: API service plus Redis backend.
+- Declarative Kubernetes layout with reusable `base` and `staging` overlay.
+- Real app behavior: Redis-backed request counter and JSON API responses.
+- Health model: separate liveness `/healthz` and readiness `/readyz`.
+- Runtime hardening: non-root containers, dropped capabilities, seccomp, and
+  disabled service account token automounting.
+- Traffic control: default-deny NetworkPolicies with explicit API-to-Redis flow.
+- Staging controls: ResourceQuota, LimitRange, PodDisruptionBudget, and HPA.
+- CI pipeline: unit tests, Docker build, YAML linting, Kustomize render, and
+  Kubernetes schema validation.
+- Operator workflow: every common task is available through `make`.
 
 ## Quick Start
 
-Run this from a privileged Codespace or Linux container with Docker available:
+Run from a privileged Linux dev environment, GitHub Codespaces, k3s, or an
+active kind context:
 
 ```bash
 make bootstrap
@@ -54,12 +65,13 @@ make smoke
 make port-forward
 ```
 
-Open `http://localhost:5000`.
+Open:
 
-`make build` imports the local image into k3s when k3s is running. It also
-supports an active kind context for local validation.
+```text
+http://localhost:5000
+```
 
-Expected API response:
+Expected response:
 
 ```json
 {
@@ -71,41 +83,60 @@ Expected API response:
 }
 ```
 
-## Useful Commands
+## API Endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/` | Increments Redis hit counter and returns app metadata |
+| `/healthz` | Liveness probe endpoint |
+| `/readyz` | Readiness probe endpoint that verifies Redis connectivity |
+| `/metrics` | Minimal Prometheus-style hit counter metric |
+
+## Common Commands
 
 ```bash
-make validate      # YAML, tests, render, schema validation, dry-run where possible
-make status        # Cluster and namespace status
-make logs          # API logs
-make restart       # Rolling restart the API
-make smoke         # Port-forward and verify health, readiness, Redis, and metrics
-make clean         # Delete the staging namespace
+make validate      # tests, YAML lint, Kustomize render, schema validation
+make build         # build flask-api:stg and load it into k3s/kind when possible
+make deploy        # apply the staging overlay and wait for rollouts
+make status        # inspect deployments, pods, services, HPA, PDB, policies
+make logs          # show API logs
+make restart       # rolling restart the API
+make smoke         # verify API, readiness, Redis, and metrics through port-forward
+make clean         # delete the staging namespace
 ```
 
 ## Repository Layout
 
 ```text
 .
-├── app/                    # Flask API and Dockerfile
+├── app/                    # Flask API, tests, Dockerfile
 ├── docs/                   # Architecture, runbook, security, troubleshooting
 ├── k8s/
-│   ├── base/               # Reusable API and Redis Kubernetes resources
-│   └── overlays/staging/   # stg namespace, generated Secret, quota, limits
+│   ├── base/               # Reusable API and Redis resources
+│   └── overlays/staging/   # Namespace, generated Secret, quota, limits
 ├── scripts/                # Bootstrap, build, deploy, validate, smoke test
-├── .github/workflows/      # CI pipeline
-└── Makefile                # Operator entrypoint
+├── .github/workflows/      # CI validation pipeline
+└── Makefile                # Main operator entrypoint
 ```
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Runbook](docs/runbook.md)
+- [Security](docs/security.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Validation](docs/validation.md)
 
 ## GitHub About
 
-Description:
+Short description:
 
 ```text
-Production-style Kubernetes multiservice lab on k3s: Flask API, Redis, Kustomize, CI validation, network policies, probes, autoscaling, and operator runbooks.
+Production-style Kubernetes multiservice lab with Flask, Redis, k3s, Kustomize, CI validation, network policies, probes, autoscaling, and runbooks.
 ```
 
 Topics:
 
 ```text
-kubernetes k3s flask redis devops kustomize cloud-native docker ci-cd sre networkpolicy
+kubernetes k3s flask redis docker kustomize devops cloud-native ci-cd sre networkpolicy
 ```
