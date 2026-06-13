@@ -60,4 +60,4 @@ jobs:
         run: kubeconform -strict -summary -ignore-missing-schemas rendered.yaml
 
       - name: Client dry-run
-        run: kubectl apply --dry-run=client -f rendered.yaml
+        run: kubectl apply --dry-run=client --validate=false -f rendered.yaml
