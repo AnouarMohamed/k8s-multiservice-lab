@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stg
+  labels:
+    app.kubernetes.io/part-of: k8s-multiservice-lab
+    kubernetes.io/metadata.name: stg
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted

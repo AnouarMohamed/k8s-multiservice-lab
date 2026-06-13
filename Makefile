@@ -1,33 +1,49 @@
-NAMESPACE=stg
-OVERLAY=k8s/overlays/staging
+SHELL := /usr/bin/env bash
 
-.PHONY: start build deploy diff status logs port-forward clean
+NAMESPACE ?= stg
+APP ?= flask-api
+IMAGE ?= flask-api:stg
+LOCAL_PORT ?= 5000
+OVERLAY ?= k8s/overlays/staging
 
-start:
-	sudo k3s server --disable=traefik --snapshotter=native > /tmp/k3s.log 2>&1 &
-	sleep 25
-	sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
-	sudo chown $$USER:$$USER ~/.kube/config
+.PHONY: bootstrap install-dev test build deploy diff validate status logs port-forward smoke restart clean
+
+bootstrap:
+	./scripts/bootstrap-k3s.sh
+
+install-dev:
+	python -m pip install -r app/requirements-dev.txt
+
+test:
+	PYTHONPATH=app pytest app/tests
 
 build:
-	docker build -t flask-api:stg ./app
-	docker save flask-api:stg | sudo k3s ctr images import -
+	./scripts/build-image.sh
 
 deploy:
-	kubectl apply -k $(OVERLAY)
+	./scripts/deploy.sh
 
 diff:
 	kubectl diff -k $(OVERLAY)
 
+validate:
+	./scripts/validate.sh
+
 status:
-	kubectl get all -n $(NAMESPACE)
+	./scripts/status.sh
 
 logs:
-	kubectl logs -l app=flask-api -n $(NAMESPACE) --tail=50
+	kubectl -n $(NAMESPACE) logs -l app.kubernetes.io/name=$(APP) --tail=100
 
 port-forward:
-	kubectl port-forward svc/stg-flask-api-svc 5000:80 -n $(NAMESPACE)
+	./scripts/port-forward.sh $(LOCAL_PORT)
+
+smoke:
+	./scripts/smoke-test.sh
+
+restart:
+	kubectl -n $(NAMESPACE) rollout restart deployment/$(APP)
+	kubectl -n $(NAMESPACE) rollout status deployment/$(APP) --timeout=120s
 
 clean:
-	kubectl delete -k $(OVERLAY) || true
-	kubectl delete namespace $(NAMESPACE) || true
+	./scripts/cleanup.sh

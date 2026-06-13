@@ -1,1 +1,18 @@
+# Local Python state
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local env and secret material
+.env
+.env.*
+*.secret.yaml
 k8s/base/secret.yaml
+
+# Build and validation output
+build/
+dist/
+rendered.yaml
+*.log

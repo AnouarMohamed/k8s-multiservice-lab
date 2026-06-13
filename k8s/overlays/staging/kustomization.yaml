@@ -1,19 +1,31 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 namespace: stg
-namePrefix: stg-
-labels:
-  - pairs:
-      env: staging
-    includeSelectors: false
+
 resources:
   - ../../base
-patches:
-  - path: replica-patch.yaml
-    target:
-      kind: Deployment
-      name: flask-api
-  - path: resource-patch.yaml
-    target:
-      kind: Deployment
-      name: flask-api
+  - namespace.yaml
+  - resourcequota.yaml
+  - limitrange.yaml
+
+configMapGenerator:
+  - name: api-config
+    behavior: replace
+    literals:
+      - SERVICE_NAME=flask-api
+      - APP_ENV=staging
+      - APP_VERSION=1.0.0
+      - REDIS_HOST=redis-svc
+      - REDIS_PORT=6379
+
+secretGenerator:
+  - name: api-secrets
+    literals:
+      - API_TOKEN=local-staging-token
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: k8s-multiservice-lab
+    app.kubernetes.io/managed-by: kustomize
