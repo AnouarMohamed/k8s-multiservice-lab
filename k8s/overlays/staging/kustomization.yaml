@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: stg
+namePrefix: stg-
+commonLabels:
+  env: staging
+resources:
+  - ../../base
+patches:
+  - path: replica-patch.yaml
+    target:
+      kind: Deployment
+      name: flask-api
+  - path: resource-patch.yaml
+    target:
+      kind: Deployment
+      name: flask-api

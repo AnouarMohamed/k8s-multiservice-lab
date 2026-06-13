@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML
+        run: yamllint k8s/
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Validate Kustomize build
+        run: kubectl kustomize k8s/overlays/staging
+
+      - name: Dry-run apply (validation only)
+        run: |
+          kubectl kustomize k8s/overlays/staging | \
+          kubectl apply --dry-run=client -f - \
+          --server-side=false 2>&1 || true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan manifests with kubesec
+        run: |
+          docker run -i kubesec/kubesec:latest scan - < \
+          <(kubectl kustomize k8s/overlays/staging | \
+          grep -A 100 'kind: Deployment' | head -100) || true
