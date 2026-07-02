@@ -9,6 +9,20 @@ resources:
   - resourcequota.yaml
   - limitrange.yaml
 
+images:
+  - name: flask-api
+    newName: ghcr.io/anouarmohamed/flask-api
+    newTag: stg
+
+patches:
+  - target:
+      kind: Deployment
+      name: flask-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
 configMapGenerator:
   - name: api-config
     behavior: replace
